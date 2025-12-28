@@ -10,6 +10,7 @@
 
 // Translates input from HID to a ckb input bitfield.
 static void hid_kb_translate(usbdevice* kb, int length, const unsigned char* urbinput);
+static void hid_bragi_short_mouse_translate(usbinput* input, int length, const unsigned char* urbinput);
 static void hid_mouse_translate(usbinput* input, int length, const unsigned char* urbinput);
 static void m95_mouse_translate(usbinput* kbinput, int length, const unsigned char* urbinput);
 
@@ -375,7 +376,7 @@ const key keymap_bragi[N_KEYS_BRAGI_PATCH] = {
     { "lbrace",         47, KEY_LEFTBRACE },
     { "rbrace",         48, KEY_RIGHTBRACE },
     { "bslash",         49, KEY_BACKSLASH },
-    { "hash",           50,  KEY_BACKSLASH_ISO },
+    { "hash",           50, KEY_BACKSLASH_ISO },
     { "colon",          51, KEY_SEMICOLON },
     { "quote",          52, KEY_APOSTROPHE },
     { "grave",          53, KEY_GRAVE },
@@ -439,23 +440,23 @@ const key keymap_bragi[N_KEYS_BRAGI_PATCH] = {
     { "ralt",          111, KEY_RIGHTALT },
     { "rwin",          112, KEY_RIGHTMETA },
     { "light",         113, KEY_CORSAIR },
-    { "lock",            1, KEY_CORSAIR },
+    { "lock",          1,   KEY_CORSAIR },
     { "ro",            115, KEY_RO },
-    { 0,                -1, KEY_NONE },
-    { 0,                -1, KEY_NONE },
-    { 0,                -1, KEY_NONE },
-    { 0,                -1, KEY_NONE },
-    { 0,                -1, KEY_NONE },
-    { 0,                -1, KEY_NONE },
+    { 0,               -1,  KEY_NONE },
+    { 0,               -1,  KEY_NONE },
+    { 0,               -1,  KEY_NONE },
+    { 0,               -1,  KEY_NONE },
+    { 0,               -1,  KEY_NONE },
+    { 0,               -1,  KEY_NONE },
     { "fn",            122, KEY_FN },
     { "stop",          123, KEY_STOPCD },
     { "play",          124, KEY_PLAYPAUSE },
     { "next",          125, KEY_NEXTSONG },
     { "prev",          126, KEY_PREVIOUSSONG },
-    { "mr",             -1, KEY_CORSAIR },
+    { "mr",            -1,  KEY_CORSAIR },
     { "profswitch",    128, KEY_CORSAIR },
-    { 0,                -1, KEY_NONE },
-    { 0,                -1, KEY_NONE },
+    { 0,               -1,  KEY_NONE },
+    { 0,               -1,  KEY_NONE },
     { "g1",            131, KEY_CORSAIR },
     { "g2",            132, KEY_CORSAIR },
     { "g3",            133, KEY_CORSAIR },
@@ -607,7 +608,7 @@ static inline void handle_bragi_key_input(unsigned char* kbinput, const unsigned
         } else {
             ckb_warn("Unhandled NKRO_KEY_IN length %d in handle_bragi_key_input(), international keys will not function", length);
         }
-    } else if(urbinput[0] == NKRO_MEDIA_IN && length == 3) {
+    } else if(urbinput[0] == NKRO_MEDIA_IN && (length == 3 || length == 5)) {
         // This section is similar to handle_nkro_media_keys(), but with different indices due to the different keymap
         // This works because these keys can not be pressed at the same time
         CLEAR_KEYBIT(kbinput, 125);         // next
@@ -620,6 +621,7 @@ static inline void handle_bragi_key_input(unsigned char* kbinput, const unsigned
         CLEAR_KEYBIT(kbinput, 104);         // voldn
 
         // We only care about the first byte
+        // FIXME: Why?
         switch(urbinput[1]){
         case 181:
             SET_KEYBIT(kbinput, 125);   // next
@@ -642,9 +644,99 @@ static inline void handle_bragi_key_input(unsigned char* kbinput, const unsigned
         case 234:
             SET_KEYBIT(kbinput, 104);   // voldn
             break;
+        case 0:
+            break; // key up
+        default:
+            ckb_err("Unhandled NKRO_MEDIA_IN length %d first:0x%hhx in handle_bragi_key_input()", length, urbinput[1]);
+            break;
         }
     } else {
         ckb_err("Invalid length %d and header 0x%hhx combination in handle_bragi_key_input()", length, urbinput[0]);
+    }
+}
+
+static inline void handle_bragi_media_keys(usbdevice* targetkb){
+    if(BRAGI_HAS_MEDIA_MACRO(targetkb)){
+        if(IS_K60PRORGB(targetkb)){
+            // if Fn is pressed
+            if(ISSET_KEYBIT(targetkb->input.keys, 122)){
+                // As awful as this hack
+                bool matched = true;
+                if(ISSET_KEYBIT(targetkb->input.keys, 62)) { // F5 -> mute
+                    CLEAR_KEYBIT(targetkb->input.keys, 62);
+                    SET_KEYBIT(targetkb->input.keys, 102);
+                } else if (ISSET_KEYBIT(targetkb->input.keys, 64)) { // F7 -> voldn
+                    CLEAR_KEYBIT(targetkb->input.keys, 64);
+                    SET_KEYBIT(targetkb->input.keys, 104);
+                } else if (ISSET_KEYBIT(targetkb->input.keys, 65)) { // F8 -> volup
+                    CLEAR_KEYBIT(targetkb->input.keys, 65);
+                    SET_KEYBIT(targetkb->input.keys, 103);
+                } else if (ISSET_KEYBIT(targetkb->input.keys, 66)) { // F9 -> stop
+                    CLEAR_KEYBIT(targetkb->input.keys, 66);
+                    SET_KEYBIT(targetkb->input.keys, 123);
+                } else if (ISSET_KEYBIT(targetkb->input.keys, 67)) { // F10 -> prev
+                    CLEAR_KEYBIT(targetkb->input.keys, 67);
+                    SET_KEYBIT(targetkb->input.keys, 126);
+                } else if (ISSET_KEYBIT(targetkb->input.keys, 68)) { // F11 -> playpause
+                    CLEAR_KEYBIT(targetkb->input.keys, 68);
+                    SET_KEYBIT(targetkb->input.keys, 124);
+                } else if (ISSET_KEYBIT(targetkb->input.keys, 69)) { // F12 -> next
+                    CLEAR_KEYBIT(targetkb->input.keys, 69);
+                    SET_KEYBIT(targetkb->input.keys, 125);
+                } else if (ISSET_KEYBIT(targetkb->input.keys, 58)) { // F1 -> winlock
+                    CLEAR_KEYBIT(targetkb->input.keys, 58);
+                    SET_KEYBIT(targetkb->input.keys, 114);
+                } else if (ISSET_KEYBIT(targetkb->input.keys, 60)) { // F3 -> brightnessdn (not supported, map to generic "light")
+                    CLEAR_KEYBIT(targetkb->input.keys, 60);
+                    SET_KEYBIT(targetkb->input.keys, 113);
+                } else if (ISSET_KEYBIT(targetkb->input.keys, 61)) { // F4 -> brightnessup (not supported, map to generic "light")
+                    CLEAR_KEYBIT(targetkb->input.keys, 61);
+                    SET_KEYBIT(targetkb->input.keys, 113);
+                } else {
+                    matched = false;
+                }
+                if(matched)
+                    CLEAR_KEYBIT(targetkb->input.keys, 122);
+            }
+        }else if(IS_K70CORERGB(targetkb)){
+            // if Fn is pressed
+            if(ISSET_KEYBIT(targetkb->input.keys, 122)){
+                // As awful as this hack
+                bool matched = true;
+                if(ISSET_KEYBIT(targetkb->input.keys, 62)) { // F5 -> stop
+                    CLEAR_KEYBIT(targetkb->input.keys, 62);
+                    SET_KEYBIT(targetkb->input.keys, 123);
+                } if(ISSET_KEYBIT(targetkb->input.keys, 63)) { // F6 -> prev
+                    CLEAR_KEYBIT(targetkb->input.keys, 63);
+                    SET_KEYBIT(targetkb->input.keys, 126);
+                } else if (ISSET_KEYBIT(targetkb->input.keys, 64)) { // F7 -> play/pause
+                    CLEAR_KEYBIT(targetkb->input.keys, 64);
+                    SET_KEYBIT(targetkb->input.keys, 124);
+                } else if (ISSET_KEYBIT(targetkb->input.keys, 65)) { // F8 -> next
+                    CLEAR_KEYBIT(targetkb->input.keys, 65);
+                    SET_KEYBIT(targetkb->input.keys, 125);
+                } else if (ISSET_KEYBIT(targetkb->input.keys, 69)) { // F12 -> supposed to switch knob function (map to ctrlwheelb)
+                    CLEAR_KEYBIT(targetkb->input.keys, 69);
+                    SET_KEYBIT(targetkb->input.keys, 137);
+                } else if (ISSET_KEYBIT(targetkb->input.keys, 58)) { // F1 -> winlock
+                    CLEAR_KEYBIT(targetkb->input.keys, 58);
+                    SET_KEYBIT(targetkb->input.keys, 114);
+                } else if (ISSET_KEYBIT(targetkb->input.keys, 59)) { // F2 -> profile switch
+                    CLEAR_KEYBIT(targetkb->input.keys, 59);
+                    SET_KEYBIT(targetkb->input.keys, 128);
+                } else if (ISSET_KEYBIT(targetkb->input.keys, 60)) { // F3 -> brightnessdn (not supported, map to generic "light")
+                    CLEAR_KEYBIT(targetkb->input.keys, 60);
+                    SET_KEYBIT(targetkb->input.keys, 113);
+                } else if (ISSET_KEYBIT(targetkb->input.keys, 61)) { // F4 -> brightnessup (not supported, map to generic "light")
+                    CLEAR_KEYBIT(targetkb->input.keys, 61);
+                    SET_KEYBIT(targetkb->input.keys, 113);
+                } else {
+                    matched = false;
+                }
+                if(matched)
+                    CLEAR_KEYBIT(targetkb->input.keys, 122);
+            }
+        }
     }
 }
 
@@ -755,23 +847,42 @@ void process_input_urb(void* context, unsigned char* buffer, int urblen, ushort 
                 if(kb->protocol == PROTO_BRAGI) {
                     if(targetkb->active) {
                         // When active, we need the movement from the standard hid packet, but the buttons from the extra packet
-                        if(buffer[1] == BRAGI_INPUT_HID) {
-                            if(urblen == 64)
-                                corsair_bragi_mousecopy(targetkb, &targetkb->input, buffer);
-                            else
-                                ckb_err("Invalid length in corsair_bragi_mousecopy(). Expected 64, got %d", urblen);
+                        // The urblen check is done here (and is 64 bytes even for 128 byte mice) because we don't check what comes from which endpoint
+                        // It is easy to mix up a bragi and an hid packet with just buffer[1] == BRAGI_INPUT_HID
+                        if(buffer[1] == BRAGI_INPUT_HID && urblen == 64) {
+                            corsair_bragi_mousecopy(targetkb, &targetkb->input, buffer);
                         } else {
-                            targetkb->input.rel_x += (buffer[5] << 8) | buffer[4];
-                            targetkb->input.rel_y += (buffer[7] << 8) | buffer[6];
-                            // Some bragi devices do not report scrolling in the SW packet
-                            // These type of hacks most likely apply to the dongle, and not the device itself in WL mode
-                            // Despite that, use targetkb for now, just because corsair_bragi_mousecopy has subkb passed to it, performing the same check.
-                            // If the above is in fact true, then we'll need a workaround.
-                            if(SW_PKT_HAS_NO_WHEEL(targetkb))
-                                targetkb->input.whl_rel_y = (signed char)buffer[8];
+                            if(USES_BRAGI_SHORT_REPORT(targetkb)) {
+                                if(urblen < 6) {
+                                    ckb_err("Bragi HID urblen too short %d < 6", urblen);
+                                } else {
+                                    targetkb->input.rel_x += (buffer[2] << 8) | buffer[1];
+                                    targetkb->input.rel_y += (buffer[4] << 8) | buffer[3];
+                                    if(SW_PKT_HAS_NO_WHEEL(targetkb))
+                                        targetkb->input.whl_rel_y = (signed char)buffer[5];
+                                }
+                            } else {
+                                if(urblen < 9) {
+                                    ckb_err("Bragi HID urblen too short %d < 9", urblen);
+                                } else {
+                                    targetkb->input.rel_x += (buffer[5] << 8) | buffer[4];
+                                    targetkb->input.rel_y += (buffer[7] << 8) | buffer[6];
+                                    // Some bragi devices do not report scrolling in the SW packet
+                                    // These type of hacks most likely apply to the dongle, and not the device itself in WL mode
+                                    // Despite that, use targetkb for now, just because corsair_bragi_mousecopy has subkb passed to it, performing the same check.
+                                    // If the above is in fact true, then we'll need a workaround.
+                                    if(SW_PKT_HAS_NO_WHEEL(targetkb))
+                                        targetkb->input.whl_rel_y = (signed char)buffer[8];
+                                }
+                            }
                         }
                     } else {
-                        hid_mouse_translate(&targetkb->input, urblen, buffer);
+                        // Because they couldn't leave the descriptor alone, there's now a shorter one
+                        // FIXME: Should this be targetkb?
+                        if(USES_BRAGI_SHORT_REPORT(targetkb))
+                            hid_bragi_short_mouse_translate(&targetkb->input, urblen, buffer);
+                        else
+                            hid_mouse_translate(&targetkb->input, urblen, buffer);
                     }
                 } else if(firstbyte == MOUSE_IN) {
                     // If we're in bootloader mode, parse the simplified reports
@@ -796,46 +907,21 @@ void process_input_urb(void* context, unsigned char* buffer, int urblen, ushort 
                         if(buffer[1] == BRAGI_INPUT_HID) {
                             corsair_kbcopy(targetkb->input.keys, buffer + 2);
                             // Check if we need to apply an awful hack to get media keys working
-                            if(BRAGI_HAS_MEDIA_MACRO(targetkb)){
-                                // if Fn is pressed
-                                if(ISSET_KEYBIT(targetkb->input.keys, 122)){
-                                    // As awful as this hack
-                                    bool matched = true;
-                                    if(ISSET_KEYBIT(targetkb->input.keys, 62)) { // F5 -> mute
-                                        CLEAR_KEYBIT(targetkb->input.keys, 62);
-                                        SET_KEYBIT(targetkb->input.keys, 102);
-                                    } else if (ISSET_KEYBIT(targetkb->input.keys, 64)) { // F7 -> voldn
-                                        CLEAR_KEYBIT(targetkb->input.keys, 64);
-                                        SET_KEYBIT(targetkb->input.keys, 104);
-                                    } else if (ISSET_KEYBIT(targetkb->input.keys, 65)) { // F8 -> volup
-                                        CLEAR_KEYBIT(targetkb->input.keys, 65);
-                                        SET_KEYBIT(targetkb->input.keys, 103);
-                                    } else if (ISSET_KEYBIT(targetkb->input.keys, 66)) { // F9 -> stop
-                                        CLEAR_KEYBIT(targetkb->input.keys, 66);
-                                        SET_KEYBIT(targetkb->input.keys, 123);
-                                    } else if (ISSET_KEYBIT(targetkb->input.keys, 67)) { // F10 -> prev
-                                        CLEAR_KEYBIT(targetkb->input.keys, 67);
-                                        SET_KEYBIT(targetkb->input.keys, 126);
-                                    } else if (ISSET_KEYBIT(targetkb->input.keys, 68)) { // F11 -> playpause
-                                        CLEAR_KEYBIT(targetkb->input.keys, 68);
-                                        SET_KEYBIT(targetkb->input.keys, 124);
-                                    } else if (ISSET_KEYBIT(targetkb->input.keys, 69)) { // F12 -> next
-                                        CLEAR_KEYBIT(targetkb->input.keys, 69);
-                                        SET_KEYBIT(targetkb->input.keys, 125);
-                                    } else if (ISSET_KEYBIT(targetkb->input.keys, 58)) { // F1 -> winlock
-                                        CLEAR_KEYBIT(targetkb->input.keys, 58);
-                                        SET_KEYBIT(targetkb->input.keys, 114);
-                                    } else if (ISSET_KEYBIT(targetkb->input.keys, 60)) { // F3 -> brightnessdn (not supported, map to generic "light")
-                                        CLEAR_KEYBIT(targetkb->input.keys, 60);
-                                        SET_KEYBIT(targetkb->input.keys, 113);
-                                    } else if (ISSET_KEYBIT(targetkb->input.keys, 61)) { // F4 -> brightnessup (not supported, map to generic "light")
-                                        CLEAR_KEYBIT(targetkb->input.keys, 61);
-                                        SET_KEYBIT(targetkb->input.keys, 113);
-                                    } else {
-                                        matched = false;
-                                    }
-                                    if(matched)
-                                        CLEAR_KEYBIT(targetkb->input.keys, 122);
+
+                            handle_bragi_media_keys(targetkb);
+                        } else if(buffer[1] == BRAGI_INPUT_DIAL) {
+                            #define MEDIA_MASK 0x60
+                            if(buffer[1] == BRAGI_INPUT_DIAL && buffer[2] == MEDIA_MASK) {
+                                // This is a packet from the volume dial
+                                // We need to handle it appropriately then clear the keys so we stop getting garbage
+                                int32_t wheel;
+                                memcpy(&wheel, buffer + 4, sizeof(int32_t));
+                                if(wheel > 0) {
+                                    // Apply fresh key data
+                                    SET_KEYBIT(targetkb->input.keys, 103); // volup
+                                } else {
+                                    // Apply fresh key data
+                                    SET_KEYBIT(targetkb->input.keys, 104); // voldn
                                 }
                             }
                         } else {
@@ -887,23 +973,21 @@ void process_input_urb(void* context, unsigned char* buffer, int urblen, ushort 
     }
 }
 
-void handle_nkro_key_input(unsigned char* kbinput, const unsigned char* urbinput, int length, int legacy){
-    int bytelen = (legacy ? 14 : 19);
-    int start = !legacy; // Legacy packets start from 0x00, other ones start from 0x01
-    if(length < start + bytelen + 1){
-        ckb_err("Invalid length %d legacy %d", length, legacy);
+void handle_nkro_key_input(unsigned char* kbinput, const unsigned char* urbinput, const int length, const int bytelen){
+    if(length < bytelen + 1){
+        ckb_err("Invalid length %d bytelen %d", length, bytelen);
         return;
     }
 
     for(int bit = 0; bit < 8; bit++){
-        if((urbinput[start] >> bit) & 1)
+        if((urbinput[0] >> bit) & 1)
             SET_KEYBIT(kbinput, hid_codes[bit + 224]);
         else
             CLEAR_KEYBIT(kbinput, hid_codes[bit + 224]);
     }
 
     for(int byte = 0; byte < bytelen; byte++){
-        char input = urbinput[start + byte + 1];
+        char input = urbinput[byte + 1];
         for(int bit = 0; bit < 8; bit++){
             int keybit = byte * 8 + bit;
             int scan = hid_codes[keybit];
@@ -918,7 +1002,7 @@ void handle_nkro_key_input(unsigned char* kbinput, const unsigned char* urbinput
     }
 }
 
-void handle_nkro_media_keys(unsigned char* kbinput, const unsigned char* urbinput, int length){
+void handle_nkro_media_keys(unsigned char* kbinput, const unsigned char* urbinput, const int length){
     // Media keys
     CLEAR_KEYBIT(kbinput, 97);          // mute
     CLEAR_KEYBIT(kbinput, 98);          // stop
@@ -949,6 +1033,11 @@ void handle_nkro_media_keys(unsigned char* kbinput, const unsigned char* urbinpu
             break;
         case 234:
             SET_KEYBIT(kbinput, 131);   // voldn
+            break;
+        case 0: // keyup
+            break;
+        default:
+            ckb_err("Unhandled NKRO_MEDIA_IN 0x%hhx length %d in handle_nkro_media_keys()", urbinput[i], length);
             break;
         }
     }
@@ -998,7 +1087,11 @@ static inline void handle_legacy_6kro_input(usbdevice* kb, const unsigned char* 
     memcpy(kb->previous_6kro, urbinput, sizeof(kb->previous_6kro));
 }
 
+#define KB_LEGACY_INPUT_LEN 14
+#define KB_NKRO_INPUT_LEN 19
+
 void hid_kb_translate(usbdevice* kb, int length, const unsigned char* urbinput){
+    // Legacy keyboards don't have Report IDs
     if(kb->protocol == PROTO_LEGACY) {
         switch(length) {
             case 2: // K65 Media keys
@@ -1011,18 +1104,19 @@ void hid_kb_translate(usbdevice* kb, int length, const unsigned char* urbinput){
                 handle_legacy_6kro_input(kb, urbinput);
                 break;
             case 15: // NKRO Input
-                handle_nkro_key_input(kb->input.keys, urbinput, length, 1);
+                handle_nkro_key_input(kb->input.keys, urbinput, length, KB_LEGACY_INPUT_LEN);
                 break;
             default:
                 ckb_warn("Got unknown legacy data");
         }
     } else {
+        // Make sure to skip the Report ID
         switch(urbinput[0]) {
-            case 0x01:
-                handle_nkro_key_input(kb->input.keys, urbinput, length, 0);
+            case NKRO_KEY_IN:
+                handle_nkro_key_input(kb->input.keys, urbinput + 1, length - 1, KB_NKRO_INPUT_LEN);
                 break;
-            case 0x02:
-                handle_nkro_media_keys(kb->input.keys, urbinput, length);
+            case NKRO_MEDIA_IN:
+                handle_nkro_media_keys(kb->input.keys, urbinput + 1, length - 1);
                 break;
             default:
                 ckb_warn("Got unknown data");
@@ -1031,6 +1125,25 @@ void hid_kb_translate(usbdevice* kb, int length, const unsigned char* urbinput){
 }
 
 #define BUTTON_HID_COUNT    5
+
+void hid_bragi_short_mouse_translate(usbinput* input, int length, const unsigned char* urbinput){
+    if(length != 6){
+        ckb_err("Invalid bragi short length %d", length);
+        return;
+    }
+    // Byte 0 = mouse buttons (bitfield)
+    for(int bit = 0; bit < BUTTON_HID_COUNT; bit++){
+        if(urbinput[0] & (1 << bit))
+            SET_KEYBIT(input->keys, MOUSE_BUTTON_FIRST + bit);
+        else
+            CLEAR_KEYBIT(input->keys, MOUSE_BUTTON_FIRST + bit);
+    }
+    // Bytes 1 - 4: movement
+    input->rel_x += (urbinput[2] << 8) | urbinput[1];
+    input->rel_y += (urbinput[4] << 8) | urbinput[3];
+    // Byte 5: wheel
+    input->whl_rel_y = (signed char)urbinput[5];
+}
 
 void hid_mouse_translate(usbinput* input, int length, const unsigned char* urbinput){
     if(length < 9){
@@ -1044,10 +1157,10 @@ void hid_mouse_translate(usbinput* input, int length, const unsigned char* urbin
         else
             CLEAR_KEYBIT(input->keys, MOUSE_BUTTON_FIRST + bit);
     }
-    // Bytes 5 - 8: movement
+    // Bytes 4 - 7: movement
     input->rel_x += (urbinput[5] << 8) | urbinput[4];
     input->rel_y += (urbinput[7] << 8) | urbinput[6];
-    // Byte 9: wheel
+    // Byte 8: wheel
     input->whl_rel_y = (signed char)urbinput[8];
 }
 
@@ -1098,6 +1211,8 @@ void m95_mouse_translate(usbinput* kbinput, int length, const unsigned char* urb
 
 #define BRAGI_MOUSE_BUTTONS 16
 #define BRAGI_ONE_BYTE_MOUSE_BUTTONS 8
+#define BRAGI_THREE_BYTE_MOUSE_BUTTONS 17
+
 /*
 01 00 == Left
 02 00 == Right
@@ -1155,6 +1270,27 @@ const unsigned char m55_wl_lut[BRAGI_ONE_BYTE_MOUSE_BUTTONS] = {
     0x08, //dpi up?
 };
 
+
+const unsigned char scimitar_bragi_lut[BRAGI_THREE_BYTE_MOUSE_BUTTONS] = {
+    0x00,
+    0x01,
+    0x02,
+    0x06,
+    0x05,
+    0x08,
+    0x09,
+    0x0A,
+    0x0B,
+    0x0C,
+    0x0D,
+    0x0E,
+    0x0F,
+    0x10,
+    0x11,
+    0x12,
+    0x13,
+};
+
 void corsair_bragi_mousecopy(usbdevice* kb, usbinput* input, const unsigned char* urbinput){
     // Increment this only once, as the loop below will increment it the first time as well
     // to skip the 00 02 header.
@@ -1162,17 +1298,22 @@ void corsair_bragi_mousecopy(usbdevice* kb, usbinput* input, const unsigned char
 
     int buttons = BRAGI_MOUSE_BUTTONS;
 
-    // Some devices only have one byte, so set those to 8 buttons
-    // We need a better way to identify this
-    if(kb->vendor == V_CORSAIR && (kb->product == P_M55_RGB_PRO || kb->product == P_DARK_CORE_RGB_PRO_SE || kb->product == P_DARK_CORE_RGB_PRO_SE_WL || kb->product == P_HARPOON_WL_U || kb->product == P_DARK_CORE_RGB_PRO || kb->product == P_DARK_CORE_RGB_PRO_WL))
-        buttons = BRAGI_ONE_BYTE_MOUSE_BUTTONS;
-
     // Pick the appropriate LUT. We can't patch the keymap as that will break standard HID input.
     const unsigned char* lut = corsair_bragi_lut;
-    if(kb->vendor == V_CORSAIR && kb->product == P_HARPOON_WL_U)
-        lut = harpoon_wl_lut;
-    else if(kb->vendor == V_CORSAIR && kb->product == P_M55_RGB_PRO)
-        lut = m55_wl_lut;
+
+    // Some devices only have one byte, so set those to 8 buttons. Others have three.
+    // We need a better way to identify this
+    if(kb->vendor == V_CORSAIR && (kb->product == P_M55_RGB_PRO || kb->product == P_DARK_CORE_RGB_PRO_SE || kb->product == P_DARK_CORE_RGB_PRO_SE_WL || kb->product == P_HARPOON_WL_U || kb->product == P_DARK_CORE_RGB_PRO || kb->product == P_DARK_CORE_RGB_PRO_WL)) {
+        buttons = BRAGI_ONE_BYTE_MOUSE_BUTTONS;
+        if(kb->vendor == V_CORSAIR && kb->product == P_HARPOON_WL_U)
+            lut = harpoon_wl_lut;
+        else if(kb->vendor == V_CORSAIR && kb->product == P_M55_RGB_PRO)
+            lut = m55_wl_lut;
+    } else if (kb->vendor == V_CORSAIR && (kb->product == P_SCIMITAR_ELITE_BRAGI)) {
+        buttons = BRAGI_THREE_BYTE_MOUSE_BUTTONS;
+        if(kb->vendor == V_CORSAIR && kb->product == P_SCIMITAR_ELITE_BRAGI)
+            lut = scimitar_bragi_lut;
+    }
 
     for(int bit = 0; bit < buttons; bit++){
         int bitinbyte = bit % 8;

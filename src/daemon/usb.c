@@ -39,6 +39,7 @@ const dpi_list mouse_dpi_list[] = {
     { P_DARK_CORE_RGB_PRO, 18000 },
     { P_DARK_CORE_RGB_PRO_SE, 18000 },
     { P_GLAIVE_PRO, 16000 },
+    { P_SCIMITAR_ELITE_BRAGI, 18000 },
     { 0, 0 }, // Keep last and do not remove
 };
 
@@ -78,6 +79,9 @@ const device_desc models[] = {
     { V_CORSAIR, P_K70_TKL_CHAMP_OPTIC, },
     { V_CORSAIR, P_K70_PRO, },
     { V_CORSAIR, P_K70_PRO_OPTIC, },
+    { V_CORSAIR, P_K70_CORE_RGB, },
+    { V_CORSAIR, P_K70_CORE_RGB_2, },
+    { V_CORSAIR, P_K70_CORE_RGB_3, },
     { V_CORSAIR, P_K90_LEGACY, },
     { V_CORSAIR, P_K95, },
     { V_CORSAIR, P_K95_LEGACY, },
@@ -127,6 +131,7 @@ const device_desc models[] = {
     { V_CORSAIR, P_HARPOON_WL_U, },
     { V_CORSAIR, P_HARPOON_WL_D, },
     { V_CORSAIR, P_GLAIVE_PRO, },
+    { V_CORSAIR, P_SCIMITAR_ELITE_BRAGI, },
     // Mousepads
     { V_CORSAIR, P_POLARIS, },
     { V_CORSAIR, P_MM700, },
@@ -211,6 +216,8 @@ const char* product_str(ushort product){
         return "k70tkl";
     if(product == P_K70_PRO || product == P_K70_PRO_OPTIC)
         return "k70pro";
+    if(product == P_K70_CORE_RGB || product == P_K70_CORE_RGB_2 || product == P_K70_CORE_RGB_3)
+        return "k70_core_rgb";
     if(product == P_K68 || product == P_K68_NRGB)
         return "k68";
     if(product == P_K65 || product == P_K65_LEGACY || product == P_K65_LUX || product == P_K65_RFIRE)
@@ -247,7 +254,7 @@ const char* product_str(ushort product){
         return "m65e";
     if(product == P_SABRE_O || product == P_SABRE_L || product == P_SABRE_N || product == P_SABRE_O2)
         return "sabre";
-    if(product == P_SCIMITAR || product == P_SCIMITAR_PRO || product == P_SCIMITAR_ELITE)
+    if(product == P_SCIMITAR || product == P_SCIMITAR_PRO || product == P_SCIMITAR_ELITE || product == P_SCIMITAR_ELITE_BRAGI)
         return "scimitar";
     if(product == P_HARPOON || product == P_HARPOON_PRO)
         return "harpoon";
